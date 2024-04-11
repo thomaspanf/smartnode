@@ -23,6 +23,7 @@ const (
 	colorGreen        string = "\033[32m"
 	colorYellow       string = "\033[33m"
 	smoothingPoolLink string = "https://docs.rocketpool.net/guides/redstone/whats-new.html#smoothing-pool"
+	maxAlertItems     int    = 3
 )
 
 func getStatus(c *cli.Context) error {
@@ -153,13 +154,13 @@ func getStatus(c *cli.Context) error {
 			fmt.Println()
 		}
 
-		// Voting status
-		fmt.Printf("%s=== DAO Voting ===%s\n", colorGreen, colorReset)
+		// Snapshot voting status
+		fmt.Printf("%s=== Snapshot Voting ===%s\n", colorGreen, colorReset)
 		blankAddress := common.Address{}
-		if status.VotingDelegate == blankAddress {
-			fmt.Println("The node does not currently have a voting delegate set, and will not be able to vote on Rocket Pool governance proposals.")
+		if status.SnapshotVotingDelegate == blankAddress {
+			fmt.Println("The node does not currently have a voting delegate set, and will not be able to vote on Rocket Pool Snapshot governance proposals.")
 		} else {
-			fmt.Printf("The node has a voting delegate of %s%s%s which can represent it when voting on Rocket Pool governance proposals.\n", colorBlue, status.VotingDelegateFormatted, colorReset)
+			fmt.Printf("The node has a voting delegate of %s%s%s which can represent it when voting on Rocket Pool Snapshot governance proposals.\n", colorBlue, status.SnapshotVotingDelegateFormatted, colorReset)
 		}
 
 		if status.SnapshotResponse.Error != "" {
@@ -175,12 +176,38 @@ func getStatus(c *cli.Context) error {
 				}
 			}
 			if len(status.SnapshotResponse.ActiveSnapshotProposals) == 0 {
-				fmt.Print("Rocket Pool has no governance proposals being voted on.\n")
+				fmt.Print("Rocket Pool has no Snapshot governance proposals being voted on.\n")
 			} else {
-				fmt.Printf("Rocket Pool has %d governance proposal(s) being voted on. You have voted on %d of those. See details using 'rocketpool network dao-proposals'.\n", len(status.SnapshotResponse.ActiveSnapshotProposals), voteCount)
+				fmt.Printf("Rocket Pool has %d Snapshot governance proposal(s) being voted on. You have voted on %d of those. See details using 'rocketpool network dao-proposals'.\n", len(status.SnapshotResponse.ActiveSnapshotProposals), voteCount)
 			}
 			fmt.Println("")
 		}
+
+		// Onchain voting status
+		fmt.Printf("%s=== Onchain Voting ===%s\n", colorGreen, colorReset)
+		if status.IsVotingInitialized {
+			fmt.Println("The node has been initialized for onchain voting.")
+
+		} else {
+			fmt.Println("The node has NOT been initialized for onchain voting. You need to run `rocketpool network initialize-voting` to participate in onchain votes.")
+		}
+
+		if status.OnchainVotingDelegate == status.AccountAddress {
+			fmt.Println("The node doesn't have a delegate, which means it can vote directly on onchain proposals.")
+		} else {
+			fmt.Printf("The node has a voting delegate of %s%s%s which can represent it when voting on Rocket Pool onchain governance proposals.\n", colorBlue, status.OnchainVotingDelegateFormatted, colorReset)
+		}
+		if status.IsRPLLockingAllowed {
+			fmt.Print("The node is allowed to lock RPL to create governance proposals/challenges.\n")
+			if status.NodeRPLLocked.Cmp(big.NewInt(0)) != 0 {
+				fmt.Printf("There are currently %.6f RPL locked.\n",
+					math.RoundDown(eth.WeiToEth(status.NodeRPLLocked), 6))
+			}
+
+		} else {
+			fmt.Print("The node is NOT allowed to lock RPL to create governance proposals/challenges.\n")
+		}
+		fmt.Println("")
 
 		// Primary withdrawal address & balances
 		fmt.Printf("%s=== Primary Withdrawal Address ===%s\n", colorGreen, colorReset)
@@ -224,16 +251,6 @@ func getStatus(c *cli.Context) error {
 					colorReset,
 					math.RoundDown(eth.WeiToEth(status.RPLWithdrawalBalances.ETH), 6),
 					math.RoundDown(eth.WeiToEth(status.RPLWithdrawalBalances.RPL), 6))
-			}
-			if status.IsRPLLockingAllowed {
-				fmt.Print("The node is allowed to lock RPL to create governance proposals/challenges.\n")
-				if status.NodeRPLLocked.Cmp(big.NewInt(0)) != 0 {
-					fmt.Printf("There are currently %.6f RPL locked.\n",
-						math.RoundDown(eth.WeiToEth(status.NodeRPLLocked), 6))
-				}
-
-			} else {
-				fmt.Print("The node is NOT allowed to lock RPL to create governance proposals/challenges.\n")
 			}
 			fmt.Println("")
 			if status.PendingRPLWithdrawalAddress.Hex() != blankAddress.Hex() {
@@ -366,15 +383,14 @@ func getStatus(c *cli.Context) error {
 	if cfg.EnableMetrics.Value == true && len(status.Alerts) > 0 {
 		// only print alerts if enabled; to avoid misleading the user to thinking everything is fine (since we really don't know).
 		fmt.Printf("\n%s=== Alerts ===%s\n", colorGreen, colorReset)
-		const maxItems = 3
 		for i, alert := range status.Alerts {
 			fmt.Println(alert.ColorString())
-			if i == maxItems-1 {
+			if i == maxAlertItems-1 {
 				break
 			}
 		}
-		if len(status.Alerts) > maxItems {
-			fmt.Printf("... and %d more.\n", len(status.Alerts)-maxItems)
+		if len(status.Alerts) > maxAlertItems {
+			fmt.Printf("... and %d more.\n", len(status.Alerts)-maxAlertItems)
 		}
 	}
 

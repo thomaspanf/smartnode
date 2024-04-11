@@ -131,17 +131,13 @@ ______           _        _    ______           _
 	fmt.Printf("%s=== Smartnode v%s ===%s\n\n", colorGreen, shared.RocketPoolVersion, colorReset)
 	fmt.Printf("Changes you should be aware of before starting:\n\n")
 
-	fmt.Printf("%s=== New Testnet: Holesky ===%s\n", colorGreen, colorReset)
-	fmt.Println("A new test network has been deployed named Holesky! This will replace Prater as the new long-term test network for Rocket Pool node operators. To use it, select the \"Holesky Testnet\" option from the Network dialog in the Smartnode section of `rocketpool service config`.\n")
-
-	fmt.Printf("%s=== Prater Removal  ===%s\n", colorGreen, colorReset)
-	fmt.Println("The previously deprecated Prater test network is now removed from the Smartnode.\n")
+	fmt.Printf("%s=== New Notification module ===%s\n", colorGreen, colorReset)
+	fmt.Println("The Smartnode alert notification functionality allows you to receive notifications about the health and important events of your Rocket Pool Smartnode. Check `https://docs.rocketpool.net/guides/node/maintenance/alerting` for more details.")
+	fmt.Println("")
 
 	fmt.Printf("%s=== New Geth Mode: PBSS ===%s\n", colorGreen, colorReset)
-	fmt.Println("Geth has been updated to v1.13, which includes the much-anticipated Path-Based State Scheme (PBSS) storage mode. With PBSS, you never have to manually prune Geth again; it prunes automatically behind the scenes during runtime! To enable it, check the \"Enable PBSS\" box in the Execution Client section of the `rocketpool service config` UI. Note you **will have to resync** Geth after enabling this for it to take effect, and will lose attestations if you don't have a fallback client enabled!\n")
-
-	fmt.Printf("%s=== MEV-Boost Changes ===%s\n", colorGreen, colorReset)
-	fmt.Println("The \"Blocknative\" relay has been shut down, so we have removed it from the MEV-Boost relay options. The other relays are still available.")
+	fmt.Println("Geth has been updated to v1.13, which includes the much-anticipated Path-Based State Scheme (PBSS) storage mode. With PBSS, you never have to manually prune Geth again; it prunes automatically behind the scenes during runtime! To enable it, check the \"Enable PBSS\" box in the Execution Client section of the `rocketpool service config` UI. Note you **will have to resync** Geth after enabling this for it to take effect, and will lose attestations if you don't have a fallback client enabled!")
+	fmt.Println("")
 }
 
 // Install the Rocket Pool update tracker for the metrics dashboard
@@ -166,8 +162,6 @@ func installUpdateTracker(c *cli.Context) error {
 	}
 
 	// Print success message & return
-	colorReset := "\033[0m"
-	colorYellow := "\033[33m"
 	fmt.Println("")
 	fmt.Println("The Rocket Pool update tracker service was successfully installed!")
 	fmt.Println("")
@@ -995,9 +989,12 @@ func pruneExecutionClient(c *cli.Context) error {
 	}
 
 	if selectedEc == cfgtypes.ExecutionClient_Geth || selectedEc == cfgtypes.ExecutionClient_Besu {
+		if selectedEc == cfgtypes.ExecutionClient_Geth {
+			fmt.Printf("%sGeth has a new feature that renders pruning obsolete. Consider enabling PBSS in the Execution Client settings in `rocketpool service config` and resyncing with `rocketpool service resync-eth1` instead of pruning.%s\n", colorYellow, colorReset)
+		}
 		fmt.Println("This will shut down your main execution client and prune its database, freeing up disk space.")
 		if cfg.UseFallbackClients.Value == false {
-			fmt.Printf("%sYou do not have a fallback execution client configured.\nYour node will no longer be able to perform any validation duties (attesting or proposing blocks) until Geth is done pruning and has synced again.\nPlease configure a fallback client with `rocketpool service config` before running this.%s\n", colorRed, colorReset)
+			fmt.Printf("%sYou do not have a fallback execution client configured.\nYour node will no longer be able to perform any validation duties (attesting or proposing blocks) until pruning is done.\nPlease configure a fallback client with `rocketpool service config` before running this.%s\n", colorRed, colorReset)
 		} else {
 			fmt.Println("You have fallback clients enabled. Rocket Pool (and your consensus client) will use that while the main client is pruning.")
 		}
@@ -1401,15 +1398,12 @@ func serviceVersion(c *cli.Context) error {
 	}
 
 	var mevBoostString string
-	var mevBoostMode string
-
-	if cfg.MevBoost.Mode.Value.(sharedConfig.Mode) == sharedConfig.Mode_Local {
-		mevBoostMode = "Local Mode"
-	} else {
-		mevBoostMode = "External Mode"
-	}
 	if cfg.EnableMevBoost.Value.(bool) {
-		mevBoostString = fmt.Sprintf("Enabled (%s)\n\tImage: %s", mevBoostMode, cfg.MevBoost.ContainerTag.Value.(string))
+		if cfg.MevBoost.Mode.Value.(sharedConfig.Mode) == sharedConfig.Mode_Local {
+			mevBoostString = fmt.Sprintf("Enabled (Local Mode)\n\tImage: %s", cfg.MevBoost.ContainerTag.Value.(string))
+		} else {
+			mevBoostString = "Enabled (External Mode)"
+		}
 	} else {
 		mevBoostString = "Disabled"
 	}

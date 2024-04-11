@@ -9,7 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/prysmaticlabs/prysm/v3/beacon-chain/core/signing"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/signing"
 	"github.com/rocket-pool/rocketpool-go/deposit"
 	"github.com/rocket-pool/rocketpool-go/minipool"
 	"github.com/rocket-pool/rocketpool-go/node"
@@ -21,8 +21,8 @@ import (
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
 
-	prdeposit "github.com/prysmaticlabs/prysm/v3/contracts/deposit"
-	ethpb "github.com/prysmaticlabs/prysm/v3/proto/prysm/v1alpha1"
+	prdeposit "github.com/prysmaticlabs/prysm/v5/contracts/deposit"
+	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/rocket-pool/smartnode/shared/services"
 	"github.com/rocket-pool/smartnode/shared/services/beacon"
 	"github.com/rocket-pool/smartnode/shared/types/api"
@@ -309,6 +309,12 @@ func nodeDeposit(c *cli.Context, amountWei *big.Int, minNodeFee float64, salt *b
 		return nil, err
 	}
 
+	// Check for Houston
+	isHoustonDeployed, err := state.IsHoustonDeployed(rp, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error checking if Houston has been deployed: %w", err)
+	}
+
 	// Response
 	response := api.NodeDepositResponse{}
 
@@ -348,11 +354,18 @@ func nodeDeposit(c *cli.Context, amountWei *big.Int, minNodeFee float64, salt *b
 	if err != nil {
 		return nil, err
 	}
-
-	// Get the node's credit balance
-	creditBalanceWei, err := node.GetNodeCreditAndBalance(rp, nodeAccount.Address, nil)
-	if err != nil {
-		return nil, err
+	var creditBalanceWei *big.Int
+	if isHoustonDeployed {
+		// Get the node's credit and ETH staked on behalf balance
+		creditBalanceWei, err = node.GetNodeUsableCreditAndBalance(rp, nodeAccount.Address, nil)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		creditBalanceWei, err = node.GetNodeDepositCredit(rp, nodeAccount.Address, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Get how much credit to use
