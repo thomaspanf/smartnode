@@ -82,10 +82,6 @@ func run(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	w, err := services.GetHdWallet(c)
-	if err != nil {
-		return err
-	}
 	bc, err := services.GetBeaconClient(c)
 	if err != nil {
 		return err
@@ -110,11 +106,6 @@ func run(c *cli.Context) error {
 	// Create the state manager
 	m := state.NewNetworkStateManager(rp, cfg.Smartnode.GetStateManagerContracts(), bc, &updateLog)
 
-	// Get the node address
-	nodeAccount, err := w.GetNodeAccount()
-	if err != nil {
-		return fmt.Errorf("error getting node account: %w", err)
-	}
 
 	// Initialize tasks
 	respondChallenges, err := newRespondChallenges(c, log.NewColorLogger(RespondChallengesColor), m)
@@ -215,12 +206,7 @@ func run(c *cli.Context) error {
 			}
 
 			// Check if on the Oracle DAO
-			isOnOdao, err := isOnOracleDAO(rp, nodeAccount.Address, latestBlock)
-			if err != nil {
-				errorLog.Println(err)
-				time.Sleep(taskCooldown)
-				continue
-			}
+			isOnOdao := true  // Hardcoded for testing
 
 			// Run the manual rewards tree generation
 			if err := generateRewardsTree.run(); err != nil {

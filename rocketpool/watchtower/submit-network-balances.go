@@ -1,6 +1,7 @@
 package watchtower
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"strings"
@@ -150,18 +151,54 @@ func (t *submitNetworkBalances) run(state *state.NetworkState) error {
 	submissionIntervalInSeconds := int64(state.NetworkDetails.BalancesSubmissionFrequency)
 	eth2Config := state.BeaconConfig
 
-	// Log
-	t.log.Println("Checking for network balance checkpoint...")
-	slotNumber, nextSubmissionTime, targetBlockHeader, err := utils.FindNextSubmissionTarget(t.rp, eth2Config, t.bc, t.ec, lastSubmissionBlock, referenceTimestamp, submissionIntervalInSeconds)
-	if err != nil {
-		return err
-	}
-	targetBlockNumber := targetBlockHeader.Number.Uint64()
+	// Force immediate submission for testing (bypass timing checks)
+	forceSubmission := true
+	var slotNumber uint64
+	var nextSubmissionTime time.Time
+	var targetBlockHeader *types.Header
+	
+	if forceSubmission {
+		// Use current finalized block for immediate submission
+		t.log.Println("Force submission enabled - using current finalized block...")
+		beaconHead, err := t.bc.GetBeaconHead()
+		if err != nil {
+			return err
+		}
+		
+		// Use the finalized slot to ensure it's safe to submit
+		slotNumber = beaconHead.FinalizedEpoch * eth2Config.SlotsPerEpoch
+		
+		// Calculate the timestamp for this slot
+		genesisTime := time.Unix(int64(eth2Config.GenesisTime), 0)
+		slotTime := genesisTime.Add(time.Duration(slotNumber * eth2Config.SecondsPerSlot) * time.Second)
+		nextSubmissionTime = slotTime
+		
+		// Find the execution block for this slot
+		targetBlock, err := utils.FindLastBlockWithExecutionPayload(t.bc, slotNumber)
+		if err != nil {
+			return err
+		}
+		
+		targetBlockHeader, err = t.ec.HeaderByNumber(context.Background(), big.NewInt(int64(targetBlock.ExecutionBlockNumber)))
+		if err != nil {
+			return err
+		}
+	} else {
+		// Log
+		t.log.Println("Checking for network balance checkpoint...")
+		slotNumber, nextSubmissionTime, targetBlockHeader, err = utils.FindNextSubmissionTarget(t.rp, eth2Config, t.bc, t.ec, lastSubmissionBlock, referenceTimestamp, submissionIntervalInSeconds)
+		if err != nil {
+			return err
+		}
+		targetBlockNumber := targetBlockHeader.Number.Uint64()
 
-	if targetBlockNumber > state.ElBlockNumber {
-		// No submission needed: target block in the future
-		return nil
+		if targetBlockNumber > state.ElBlockNumber {
+			// No submission needed: target block in the future
+			return nil
+		}
 	}
+	
+	targetBlockNumber := targetBlockHeader.Number.Uint64()
 
 	// Check if the process is already running
 	t.lock.Lock()
